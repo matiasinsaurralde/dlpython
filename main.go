@@ -21,17 +21,17 @@ typedef PyObject* (*PyImport_Import_f)(PyObject*);
 PyImport_Import_f _PyImport_Import;
 PyObject* PyImport_Import(PyObject* m) { return _PyImport_Import(m); };
 
-typedef void* (*PyModule_GetDict_f)(void*);
+typedef PyObject* (*PyModule_GetDict_f)(PyObject*);
 PyModule_GetDict_f _PyModule_GetDict;
-void* PyModule_GetDict(void *p) { return _PyModule_GetDict(p); };
+PyObject* PyModule_GetDict(PyObject* p) { return _PyModule_GetDict(p); };
 
-typedef void* (*PyDict_GetItemString_f)(void*, const char*);
+typedef PyObject* (*PyDict_GetItemString_f)(PyObject*, const char*);
 PyDict_GetItemString_f _PyDict_GetItemString;
-void* PyDict_GetItemString(void* a, const char* b) { return _PyDict_GetItemString(a,b); };
+PyObject* PyDict_GetItemString(PyObject* a, const char* b) { return _PyDict_GetItemString(a,b); };
 
-typedef void* (*PyObject_CallObject_f)(void*, void*);
+typedef PyObject* (*PyObject_CallObject_f)(PyObject*, void*);
 PyObject_CallObject_f _PyObject_CallObject;
-void* PyObject_CallObject(void* p) {
+PyObject* PyObject_CallObject(PyObject* p) {
 	return _PyObject_CallObject(p, NULL);
  };
 
@@ -199,19 +199,17 @@ func PyImportImport(moduleName *C.PyObject) *C.PyObject {
 	return C.PyImport_Import(moduleName)
 }
 
-func PyModuleGetDict(p unsafe.Pointer) unsafe.Pointer {
-	ptr := unsafe.Pointer(C.PyModule_GetDict(p))
-	return ptr
+func PyModuleGetDict(p *C.PyObject) *C.PyObject {
+	return C.PyModule_GetDict(p)
 }
 
-func PyDictGetItemString(a unsafe.Pointer, b string) unsafe.Pointer {
+func PyDictGetItemString(o *C.PyObject, b string) *C.PyObject {
 	cstr := C.CString(b)
 	defer C.free(unsafe.Pointer(cstr))
-	ptr := unsafe.Pointer(C.PyDict_GetItemString(a, cstr))
-	return ptr
+	return C.PyDict_GetItemString(o, cstr)
 }
 
-func PyObjectCallObject(o unsafe.Pointer) {
+func PyObjectCallObject(o *C.PyObject) {
 	C.PyObject_CallObject(o)
 }
 
@@ -236,13 +234,6 @@ func loadLibrary() error {
 	return nil
 }
 
-// PyRunSimpleString wraps a C call.
-/*
-func PyRunSimpleString(input string) {
-	s := C.CString(input)
-	defer C.free(unsafe.Pointer(s))
-	C.PyRun_SimpleString(s)
-}*/
 // Init will initialize the Python runtime.
 func Init() error {
 	// Try to load the library:

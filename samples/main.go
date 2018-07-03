@@ -1,14 +1,16 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/matiasinsaurralde/go-python-dyn"
 )
 
 func main() {
-	fmt.Println(python.ABC)
-	err := python.FindPythonConfig("3")
+	cwd, _ := os.Getwd()
+	os.Setenv("PYTHONPATH", cwd)
+
+	err := python.FindPythonConfig("3.5")
 	if err != nil {
 		panic(err)
 	}
@@ -16,5 +18,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	python.PyRunSimpleString(`print("Hello from Python")`)
+
+	moduleName := python.PyUnicodeFromString("hello")
+	module := python.PyImportImport(moduleName)
+	dict := python.PyModuleGetDict(module)
+	fn := python.PyDictGetItemString(dict, "myfn")
+	python.PyObjectCallObject(fn)
 }
