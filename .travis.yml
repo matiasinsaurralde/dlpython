@@ -2,15 +2,23 @@ language: go
 go:
   - "1.10"
 
-sudo: required
-dist: trusty
+matrix:
+  include:
+    - dist: precise
+      sudo: required
+      env: PYTHON_VERSION=2
+    - dist: trusty
+      sudo: required
+      env: PYTHON_VERSION=3
+    - dist: trusty
+      sudo: required
+      env: PYTHON_VERSION=2
 
 addons:
   apt:
     update: true
     packages:
       - build-essential
-      - libpython3-all-dev
 
 script:
   - go test . -v
