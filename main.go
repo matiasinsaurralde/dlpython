@@ -1,6 +1,8 @@
 package python
 
 /*
+#cgo LDFLAGS: -ldl
+
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -126,13 +128,18 @@ func getLibraryPath() error {
 		return err
 	}
 	outString := string(out)
-	var libDir string
-	var libName string
-	for _, v := range strings.Split(outString, " ") {
+	var libDir, libName string
+	splits := strings.Split(outString, " ")
+	for _, v := range splits {
+		if len(v) <= 2 {
+			continue
+		}
 		prefix := v[0:2]
 		switch prefix {
 		case "-L":
-			libDir = strings.Replace(v, prefix, "", -1)
+			if libDir == "" {
+				libDir = strings.Replace(v, prefix, "", -1)
+			}
 		case "-l":
 			if strings.Contains(v, "python") {
 				libName = strings.Replace(v, prefix, "", -1)
@@ -159,7 +166,12 @@ func mapCalls() {
 	defer C.free(unsafe.Pointer(CPyInitializeSym))
 	C._Py_Initialize = C.Py_Initialize_f(C.dlsym(C.python_lib, CPyInitializeSym))
 
-	CPyUnicodeFromStringSym := C.CString("PyUnicode_FromString")
+	var CPyUnicodeFromStringSym *C.char
+	if strings.Contains(pythonLibraryPath, "2.7") {
+		CPyUnicodeFromStringSym = C.CString("PyString_FromString")
+	} else {
+		CPyUnicodeFromStringSym = C.CString("PyUnicode_FromString")
+	}
 	defer C.free(unsafe.Pointer(CPyUnicodeFromStringSym))
 	C._PyUnicode_FromString = C.PyUnicode_FromString_f(C.dlsym(C.python_lib, CPyUnicodeFromStringSym))
 
