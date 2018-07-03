@@ -5,39 +5,60 @@ package python
 #include <stdlib.h>
 #include <stdio.h>
 
-void* python_library;
+void* python_lib;
 
-typedef void (*py_initialize_f)();
-py_initialize_f py_initialize;
+typedef struct _object {} PyObject;
 
-typedef void (*pyrun_simplestring_f)(const char*);
-pyrun_simplestring_f pyrun_simplestring;
+typedef void (*Py_Initialize_f)();
+Py_Initialize_f _Py_Initialize;
+void Py_Initialize() { _Py_Initialize(); };
 
-void map_calls() {
-	py_initialize = dlsym(python_library, "Py_Initialize");
-	pyrun_simplestring = dlsym(python_library, "PyRun_SimpleString");
-}
+typedef PyObject* (*PyUnicode_FromString_f)(const char*);
+PyUnicode_FromString_f _PyUnicode_FromString;
+PyObject* PyUnicode_FromString(const char* u) { return _PyUnicode_FromString(u); };
 
-void Py_Initialize() {
-	py_initialize();
-}
+typedef PyObject* (*PyImport_Import_f)(PyObject*);
+PyImport_Import_f _PyImport_Import;
+PyObject* PyImport_Import(PyObject* m) { return _PyImport_Import(m); };
 
-void PyRun_SimpleString(const char* input) {
-	pyrun_simplestring(input);
-}
+typedef void* (*PyModule_GetDict_f)(void*);
+PyModule_GetDict_f _PyModule_GetDict;
+void* PyModule_GetDict(void *p) { return _PyModule_GetDict(p); };
 
-int load_library(char* path) {
-	python_library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-	if(python_library == NULL) {
-		return -1;
-	}
-	return 0;
-}
+typedef void* (*PyDict_GetItemString_f)(void*, const char*);
+PyDict_GetItemString_f _PyDict_GetItemString;
+void* PyDict_GetItemString(void* a, const char* b) { return _PyDict_GetItemString(a,b); };
+
+typedef void* (*PyObject_CallObject_f)(void*, void*);
+PyObject_CallObject_f _PyObject_CallObject;
+void* PyObject_CallObject(void* p) {
+	return _PyObject_CallObject(p, NULL);
+ };
+
+ typedef void* (*PyTuple_GetItem_f)(void*, int);
+ PyTuple_GetItem_f _PyTuple_GetItem;
+ void* PyTuple_GetItem(void* object, int index) {
+	 return _PyTuple_GetItem(object, index);
+ };
+
+ typedef char* (*PyBytes_AsString_f)(void*);
+ PyBytes_AsString_f _PyBytes_AsString;
+ char* PyBytes_AsString(void* object) {
+	 return _PyBytes_AsString(object);
+ };
+
+typedef void (*PyRunSimpleString_f)(const char*);
+PyRunSimpleString_f _PyRunSimpleString;
+void PyRunSimpleString(const char* m) {
+	_PyRunSimpleString(m);
+};
+
 */
 import "C"
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -48,13 +69,11 @@ import (
 	"unsafe"
 )
 
-// ABC is abc.
-const ABC = 1
-
 var (
-	errEmptyPath   = errors.New("Empty PATH")
-	errLibNotFound = errors.New("Library not found")
-	errLibLoad     = errors.New("Couldn't load library")
+	errEmptyPath      = errors.New("Empty PATH")
+	errLibNotFound    = errors.New("Library not found")
+	errLibLoad        = errors.New("Couldn't load library")
+	errOSNotSupported = errors.New("OS not supported")
 
 	pythonConfigExpr = regexp.MustCompile(`python(.*)-config`)
 
@@ -80,6 +99,7 @@ func FindPythonConfig(prefix string) error {
 			matches := pythonConfigExpr.FindAllStringSubmatch(name, -1)
 			if len(matches) > 0 {
 				version := matches[0][1]
+				fmt.Println("Found Python installation", version, name)
 				if strings.HasPrefix(version, prefix) {
 					fullPath := filepath.Join(p, name)
 					pythonConfigBinaries = append(pythonConfigBinaries, fullPath)
@@ -125,7 +145,7 @@ func getLibraryPath() error {
 	case "linux":
 		libName = "lib" + libName + ".so"
 	default:
-		// Not supported
+		return errOSNotSupported
 	}
 	pythonLibraryPath = filepath.Join(libDir, libName)
 	if _, err := os.Stat(pythonLibraryPath); os.IsNotExist(err) {
@@ -135,31 +155,94 @@ func getLibraryPath() error {
 }
 
 func mapCalls() {
-	C.map_calls()
+	CPyInitializeSym := C.CString("Py_Initialize")
+	defer C.free(unsafe.Pointer(CPyInitializeSym))
+	C._Py_Initialize = C.Py_Initialize_f(C.dlsym(C.python_lib, CPyInitializeSym))
+
+	CPyUnicodeFromStringSym := C.CString("PyUnicode_FromString")
+	defer C.free(unsafe.Pointer(CPyUnicodeFromStringSym))
+	C._PyUnicode_FromString = C.PyUnicode_FromString_f(C.dlsym(C.python_lib, CPyUnicodeFromStringSym))
+
+	CPyImportImportSym := C.CString("PyImport_Import")
+	defer C.free(unsafe.Pointer(CPyImportImportSym))
+	C._PyImport_Import = C.PyImport_Import_f(C.dlsym(C.python_lib, CPyImportImportSym))
+
+	CPyModuleGetDict := C.CString("PyModule_GetDict")
+	defer C.free(unsafe.Pointer(CPyModuleGetDict))
+	C._PyModule_GetDict = C.PyModule_GetDict_f(C.dlsym(C.python_lib, CPyModuleGetDict))
+
+	CPyDictGetItemString := C.CString("PyDict_GetItemString")
+	defer C.free(unsafe.Pointer(CPyDictGetItemString))
+	C._PyDict_GetItemString = C.PyDict_GetItemString_f(C.dlsym(C.python_lib, CPyDictGetItemString))
+
+	CPyObjectCallObject := C.CString("PyObject_CallObject")
+	defer C.free(unsafe.Pointer(CPyObjectCallObject))
+	C._PyObject_CallObject = C.PyObject_CallObject_f(C.dlsym(C.python_lib, CPyObjectCallObject))
+
+	CPyRunSimpleStringSym := C.CString("PyRun_SimpleString")
+	defer C.free(unsafe.Pointer(CPyRunSimpleStringSym))
+	C._PyRunSimpleString = C.PyRunSimpleString_f(C.dlsym(C.python_lib, CPyRunSimpleStringSym))
+}
+
+// PyInitialize is a wrapper.
+func PyInitialize() {
+	C.Py_Initialize()
+}
+
+func PyUnicodeFromString(input string) *C.PyObject {
+	Cinput := C.CString(input)
+	ptr := C.PyUnicode_FromString(Cinput)
+	return ptr
+}
+
+func PyImportImport(moduleName *C.PyObject) *C.PyObject {
+	return C.PyImport_Import(moduleName)
+}
+
+func PyModuleGetDict(p unsafe.Pointer) unsafe.Pointer {
+	ptr := unsafe.Pointer(C.PyModule_GetDict(p))
+	return ptr
+}
+
+func PyDictGetItemString(a unsafe.Pointer, b string) unsafe.Pointer {
+	cstr := C.CString(b)
+	defer C.free(unsafe.Pointer(cstr))
+	ptr := unsafe.Pointer(C.PyDict_GetItemString(a, cstr))
+	return ptr
+}
+
+func PyObjectCallObject(o unsafe.Pointer) {
+	C.PyObject_CallObject(o)
+}
+
+func PyTupleGetItem(o unsafe.Pointer, i int) unsafe.Pointer {
+	ci := C.int(i)
+	return C.PyTuple_GetItem(o, ci)
+}
+
+func PyRunSimpleString(s string) {
+	cs := C.CString(s)
+	defer C.free(unsafe.Pointer(cs))
+	C.PyRunSimpleString(cs)
 }
 
 func loadLibrary() error {
 	libPath := C.CString(pythonLibraryPath)
 	defer C.free(unsafe.Pointer(libPath))
-	result := C.load_library(libPath)
-	if result == -1 {
+	C.python_lib = C.dlopen(libPath, C.RTLD_NOW|C.RTLD_GLOBAL)
+	if C.python_lib == nil {
 		return errLibLoad
 	}
 	return nil
 }
 
-// PyInitialize wraps a C call.
-func PyInitialize() {
-	C.Py_Initialize()
-}
-
 // PyRunSimpleString wraps a C call.
+/*
 func PyRunSimpleString(input string) {
 	s := C.CString(input)
 	defer C.free(unsafe.Pointer(s))
 	C.PyRun_SimpleString(s)
-}
-
+}*/
 // Init will initialize the Python runtime.
 func Init() error {
 	// Try to load the library:
@@ -169,7 +252,6 @@ func Init() error {
 	}
 	// Map API calls and initialize runtime:
 	mapCalls()
-
 	PyInitialize()
 	return nil
 }
