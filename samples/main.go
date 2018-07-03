@@ -24,4 +24,7 @@ func main() {
 	dict := python.PyModuleGetDict(module)
 	fn := python.PyDictGetItemString(dict, "myfn")
 	python.PyObjectCallObject(fn)
+	python.PyRunSimpleString("import google.protobuf.internal.api_implementation")
+	python.PyRunSimpleString("import cffi")
+	python.PyRunSimpleString("print(google.protobuf.internal.api_implementation.Type())")
 }
