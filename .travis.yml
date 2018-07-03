@@ -1,0 +1,16 @@
+language: go
+go:
+  - "1.10"
+
+sudo: required
+dist: trusty
+
+addons:
+  apt:
+    update: true
+    packages:
+      - build-essential
+      - libpython3-all-dev
+
+script:
+  - go test . -v
