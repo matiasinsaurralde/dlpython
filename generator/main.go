@@ -213,7 +213,12 @@ func (f *FnWrapper) Generate() error {
 	// Build the function body:
 	goCode.WriteString(" {\n")
 	goCode.WriteRune('\t')
-	goCode.WriteString("return C." + fnName + "(")
+
+	if spec.Return == nil {
+		goCode.WriteString("C." + fnName + "(")
+	} else {
+		goCode.WriteString("return C." + fnName + "(")
+	}
 	// Add args:
 	goCode.WriteString(strings.Join(args, ","))
 	goCode.WriteString(")")
@@ -237,7 +242,7 @@ func main() {
 			"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include",
 		},
 		SourcesPaths: []string{
-			"/Users/matias/.gvm/pkgsets/go1.10/global/src/github.com/matiasinsaurralde/go-python-dyn/c-for-go/headers/Python.h",
+			"/Users/matias/.gvm/pkgsets/go1.10/global/src/github.com/matiasinsaurralde/dlpython/c-for-go/headers/Python.h",
 		},
 		// Arch:    "x86_64",
 		Defines: map[string]interface{}{
@@ -263,25 +268,31 @@ func main() {
 		Fns:  make([]FnWrapper, 0),
 	}
 
+	whitelist := []string{"Py_Initialize"}
+
 	for _, decl := range declares {
 		switch decl.Spec.Kind() {
 		case translator.FunctionKind:
-			if strings.HasPrefix(decl.Name, "Py") {
-				// if decl.Name != "PyCode_Addr2Line" {
-				//	continue
-				// }
-				// if decl.Name != "PyMem_GetAllocator" {
-				//	continue
-				// }
-				f := FnWrapper{decl: decl}
-				if err := f.Generate(); err != nil {
-					panic(err)
+			// Check if the function is part of the whitelist:
+			var found bool
+			for _, v := range whitelist {
+				if v == decl.Name {
+					found = true
+					break
 				}
-				pkg.Fns = append(pkg.Fns, f)
 			}
+			if !found {
+				continue
+			}
+
+			// Construct the function wrapper and generate the binding code:
+			f := FnWrapper{decl: decl}
+			if err := f.Generate(); err != nil {
+				panic(err)
+			}
+			pkg.Fns = append(pkg.Fns, f)
 		}
 	}
 
 	pkg.WriteTo(os.Stdout)
-
 }
