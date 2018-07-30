@@ -17,7 +17,10 @@ const defaultHeader = `
 #include <stdio.h>
 
 void* python_lib;
-typedef struct _object {} PyObject;
+typedef struct _pyobject {} PyObject;
+typedef struct _pythreadstate {} PyThreadState;
+typedef struct _pygilstate {} PyGILState_STATE;
+
 
 `
 
@@ -42,6 +45,10 @@ func (p *Pkg) WriteTo(w io.Writer) (int64, error) {
 	// End cgo block:
 	s.WriteString("*/\n")
 	s.WriteString("import \"C\"\n")
+	s.WriteString("import \"unsafe\"\n")
+
+	// Add a dummy "unsafe.Pointer" so that the package builds even when "unsafe" isn't in use:
+	s.WriteString("type dummyPtr unsafe.Pointer\n")
 
 	// Append generated Go code:
 	for _, fn := range p.Fns {
@@ -65,10 +72,18 @@ func (f *FnWrapper) getGoType(input string) string {
 	switch input {
 	case "PyObject*":
 		return "*C.PyObject"
+	case "PyThreadState*":
+		return "*C.PyThreadState"
+	case "PyGILState_STATE":
+		return "C.PyGILState_STATE"
 	case "int":
-		return "int"
+		return "C.int"
+	case "long int":
+		return "C.long"
 	case "void*":
 		return "unsafe.Pointer"
+	case "char*":
+		return "*C.char"
 	default:
 		return "unsafe.Pointer"
 	}
@@ -80,6 +95,8 @@ func (f *FnWrapper) getCCType(input string) string {
 		return "PyObject*"
 	case "int":
 		return "int"
+	case "char*":
+		return "char*"
 	default:
 		return "void*"
 	}
@@ -183,6 +200,7 @@ func (f *FnWrapper) Generate() error {
 			goCode.WriteString(" ")
 			goCode.WriteString(f.getGoType(structSpec.String()))
 		case *translator.CTypeSpec:
+			args = append(args, p.Name)
 			typeSpec := p.Spec.(*translator.CTypeSpec)
 			goCode.WriteString(p.Name)
 			goCode.WriteString(" ")
@@ -219,6 +237,7 @@ func (f *FnWrapper) Generate() error {
 	} else {
 		goCode.WriteString("return C." + fnName + "(")
 	}
+
 	// Add args:
 	goCode.WriteString(strings.Join(args, ","))
 	goCode.WriteString(")")
@@ -253,7 +272,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println("Got translation unit")
 	if unit != nil {
 	}
 
@@ -268,7 +286,24 @@ func main() {
 		Fns:  make([]FnWrapper, 0),
 	}
 
-	whitelist := []string{"Py_Initialize"}
+	whitelist := []string{
+		"Py_Initialize",
+		"Py_IsInitialized",
+		"PyEval_InitThreads",
+		"PyEval_SaveThread",
+		"PyUnicode_FromString",
+		"PyImport_Import",
+		"PyModule_GetDict",
+		"PyErr_Print",
+		"PyDict_GetItemString", // Investigate args order
+		"PyGILState_Ensure",
+		"PyGILState_Release",
+		"PyObject_GetAttr",
+		"PyObject_CallObject",
+		"PyBytes_AsString",
+		"PyLong_AsLong",
+		// "PyTuple_Pack",
+	}
 
 	for _, decl := range declares {
 		switch decl.Spec.Kind() {
