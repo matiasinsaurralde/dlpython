@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/matiasinsaurralde/go-python-dyn"
+	"github.com/matiasinsaurralde/dlpython"
 )
 
 func main() {
