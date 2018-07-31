@@ -6,55 +6,6 @@ package python
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-void* python_lib;
-
-typedef struct _object {} PyObject;
-
-typedef void (*Py_Initialize_f)();
-Py_Initialize_f _Py_Initialize;
-void Py_Initialize() { _Py_Initialize(); };
-
-typedef PyObject* (*PyUnicode_FromString_f)(const char*);
-PyUnicode_FromString_f _PyUnicode_FromString;
-PyObject* PyUnicode_FromString(const char* u) { return _PyUnicode_FromString(u); };
-
-typedef PyObject* (*PyImport_Import_f)(PyObject*);
-PyImport_Import_f _PyImport_Import;
-PyObject* PyImport_Import(PyObject* m) { return _PyImport_Import(m); };
-
-typedef PyObject* (*PyModule_GetDict_f)(PyObject*);
-PyModule_GetDict_f _PyModule_GetDict;
-PyObject* PyModule_GetDict(PyObject* p) { return _PyModule_GetDict(p); };
-
-typedef PyObject* (*PyDict_GetItemString_f)(PyObject*, const char*);
-PyDict_GetItemString_f _PyDict_GetItemString;
-PyObject* PyDict_GetItemString(PyObject* a, const char* b) { return _PyDict_GetItemString(a,b); };
-
-typedef PyObject* (*PyObject_CallObject_f)(PyObject*, void*);
-PyObject_CallObject_f _PyObject_CallObject;
-PyObject* PyObject_CallObject(PyObject* p) {
-	return _PyObject_CallObject(p, NULL);
- };
-
- typedef void* (*PyTuple_GetItem_f)(void*, int);
- PyTuple_GetItem_f _PyTuple_GetItem;
- void* PyTuple_GetItem(void* object, int index) {
-	 return _PyTuple_GetItem(object, index);
- };
-
- typedef char* (*PyBytes_AsString_f)(void*);
- PyBytes_AsString_f _PyBytes_AsString;
- char* PyBytes_AsString(void* object) {
-	 return _PyBytes_AsString(object);
- };
-
-typedef void (*PyRunSimpleString_f)(const char*);
-PyRunSimpleString_f _PyRunSimpleString;
-void PyRunSimpleString(const char* m) {
-	_PyRunSimpleString(m);
-};
-
 */
 import "C"
 
@@ -68,7 +19,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"unsafe"
 )
 
 var (
@@ -161,91 +111,6 @@ func getLibraryPath() error {
 	return nil
 }
 
-func mapCalls() {
-	CPyInitializeSym := C.CString("Py_Initialize")
-	defer C.free(unsafe.Pointer(CPyInitializeSym))
-	C._Py_Initialize = C.Py_Initialize_f(C.dlsym(C.python_lib, CPyInitializeSym))
-
-	var CPyUnicodeFromStringSym *C.char
-	if strings.Contains(pythonLibraryPath, "2.7") {
-		CPyUnicodeFromStringSym = C.CString("PyString_FromString")
-	} else {
-		CPyUnicodeFromStringSym = C.CString("PyUnicode_FromString")
-	}
-	defer C.free(unsafe.Pointer(CPyUnicodeFromStringSym))
-	C._PyUnicode_FromString = C.PyUnicode_FromString_f(C.dlsym(C.python_lib, CPyUnicodeFromStringSym))
-
-	CPyImportImportSym := C.CString("PyImport_Import")
-	defer C.free(unsafe.Pointer(CPyImportImportSym))
-	C._PyImport_Import = C.PyImport_Import_f(C.dlsym(C.python_lib, CPyImportImportSym))
-
-	CPyModuleGetDict := C.CString("PyModule_GetDict")
-	defer C.free(unsafe.Pointer(CPyModuleGetDict))
-	C._PyModule_GetDict = C.PyModule_GetDict_f(C.dlsym(C.python_lib, CPyModuleGetDict))
-
-	CPyDictGetItemString := C.CString("PyDict_GetItemString")
-	defer C.free(unsafe.Pointer(CPyDictGetItemString))
-	C._PyDict_GetItemString = C.PyDict_GetItemString_f(C.dlsym(C.python_lib, CPyDictGetItemString))
-
-	CPyObjectCallObject := C.CString("PyObject_CallObject")
-	defer C.free(unsafe.Pointer(CPyObjectCallObject))
-	C._PyObject_CallObject = C.PyObject_CallObject_f(C.dlsym(C.python_lib, CPyObjectCallObject))
-
-	CPyRunSimpleStringSym := C.CString("PyRun_SimpleString")
-	defer C.free(unsafe.Pointer(CPyRunSimpleStringSym))
-	C._PyRunSimpleString = C.PyRunSimpleString_f(C.dlsym(C.python_lib, CPyRunSimpleStringSym))
-}
-
-// PyInitialize is a wrapper.
-func PyInitialize() {
-	C.Py_Initialize()
-}
-
-func PyUnicodeFromString(input string) *C.PyObject {
-	Cinput := C.CString(input)
-	ptr := C.PyUnicode_FromString(Cinput)
-	return ptr
-}
-
-func PyImportImport(moduleName *C.PyObject) *C.PyObject {
-	return C.PyImport_Import(moduleName)
-}
-
-func PyModuleGetDict(p *C.PyObject) *C.PyObject {
-	return C.PyModule_GetDict(p)
-}
-
-func PyDictGetItemString(o *C.PyObject, b string) *C.PyObject {
-	cstr := C.CString(b)
-	defer C.free(unsafe.Pointer(cstr))
-	return C.PyDict_GetItemString(o, cstr)
-}
-
-func PyObjectCallObject(o *C.PyObject) {
-	C.PyObject_CallObject(o)
-}
-
-func PyTupleGetItem(o unsafe.Pointer, i int) unsafe.Pointer {
-	ci := C.int(i)
-	return C.PyTuple_GetItem(o, ci)
-}
-
-func PyRunSimpleString(s string) {
-	cs := C.CString(s)
-	defer C.free(unsafe.Pointer(cs))
-	C.PyRunSimpleString(cs)
-}
-
-func loadLibrary() error {
-	libPath := C.CString(pythonLibraryPath)
-	defer C.free(unsafe.Pointer(libPath))
-	C.python_lib = C.dlopen(libPath, C.RTLD_NOW|C.RTLD_GLOBAL)
-	if C.python_lib == nil {
-		return errLibLoad
-	}
-	return nil
-}
-
 // Init will initialize the Python runtime.
 func Init() error {
 	// Try to load the library:
@@ -255,6 +120,5 @@ func Init() error {
 	}
 	// Map API calls and initialize runtime:
 	mapCalls()
-	PyInitialize()
 	return nil
 }
