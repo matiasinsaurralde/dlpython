@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -111,13 +112,14 @@ func getLibraryPath() error {
 	return nil
 }
 
+var libPath *C.char
+
 // Init will initialize the Python runtime.
 func Init() error {
-	// Try to load the library:
-	err := loadLibrary()
-	if err != nil {
-		return err
-	}
+	// Set the library path:
+	libPath = C.CString(pythonLibraryPath)
+	defer C.free(unsafe.Pointer(libPath))
+
 	// Map API calls and initialize runtime:
 	mapCalls()
 	return nil

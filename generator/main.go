@@ -57,6 +57,10 @@ func (p *Pkg) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	s.WriteString("func mapCalls() {\n")
+
+	// Add dlopen call:
+	s.WriteString("\tC.python_lib = C.dlopen(libPath, C.RTLD_NOW|C.RTLD_GLOBAL)\n")
+
 	for _, fn := range p.Fns {
 		sym := "s_" + fn.fnName
 		symDecl := fmt.Sprintf("\t%s := C.CString(\"%s\")\n", sym, fn.fnName)
@@ -74,6 +78,7 @@ func (p *Pkg) WriteTo(w io.Writer) (int64, error) {
 		s.WriteString(binding)
 		s.WriteString("\n")
 	}
+
 	s.WriteString("}\n")
 
 	// Finally write everything to w:
