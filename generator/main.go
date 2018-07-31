@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -55,6 +56,26 @@ func (p *Pkg) WriteTo(w io.Writer) (int64, error) {
 		s.WriteString(fn.goImpl)
 	}
 
+	s.WriteString("func mapCalls() {\n")
+	for _, fn := range p.Fns {
+		sym := "s_" + fn.fnName
+		symDecl := fmt.Sprintf("\t%s := C.CString(\"%s\")\n", sym, fn.fnName)
+		s.WriteString(symDecl)
+
+		deferFree := fmt.Sprintf("\tdefer C.free(unsafe.Pointer(%s))\n", sym)
+		s.WriteString(deferFree)
+
+		binding := fmt.Sprintf(
+			"\tC.%s =  C.%s(C.dlsym(C.python_lib, %s))\n",
+			fn.fnPtrName,
+			fn.fnTypeName,
+			sym,
+		)
+		s.WriteString(binding)
+		s.WriteString("\n")
+	}
+	s.WriteString("}\n")
+
 	// Finally write everything to w:
 	return s.WriteTo(w)
 }
@@ -66,6 +87,10 @@ type FnWrapper struct {
 	goImpl string
 
 	ccParams map[string]string
+
+	fnPtrName  string
+	fnName     string
+	fnTypeName string
 }
 
 func (f *FnWrapper) getGoType(input string) string {
@@ -127,9 +152,9 @@ func (f *FnWrapper) Generate() error {
 		return nil
 	}
 
-	fnName := spec.String()
-	fnPtrName := fnName + "_ptr"
-	fnTypeName := fnName + "_f"
+	f.fnName = spec.String()
+	f.fnPtrName = f.fnName + "_ptr"
+	f.fnTypeName = f.fnName + "_f"
 	paramsLength := len(spec.Params) - 1
 	var notImpl bool
 	var fnReturnType string
@@ -145,7 +170,7 @@ func (f *FnWrapper) Generate() error {
 	ccCode.WriteString(fnReturnType)
 
 	// TODO: add args
-	ccCode.WriteString(" (*" + fnTypeName + ")")
+	ccCode.WriteString(" (*" + f.fnTypeName + ")")
 	ccCode.WriteString("(")
 	// ccCode.WriteString(f.buildCCArgs(paramsLength, false))
 	i := 0
@@ -158,9 +183,9 @@ func (f *FnWrapper) Generate() error {
 	}
 	ccCode.WriteString(");\n")
 
-	ccCode.WriteString(fnTypeName + " " + fnPtrName + ";\n")
+	ccCode.WriteString(f.fnTypeName + " " + f.fnPtrName + ";\n")
 	// Write function wrapper:
-	ccCode.WriteString(fnReturnType + " " + fnName + "(")
+	ccCode.WriteString(fnReturnType + " " + f.fnName + "(")
 	i = 0
 	for p, t := range f.ccParams {
 		ccCode.WriteString(t + " " + p)
@@ -171,7 +196,7 @@ func (f *FnWrapper) Generate() error {
 	}
 	// ccCode.WriteString(f.buildCCArgs(paramsLength, true))
 	ccCode.WriteString(") ")
-	ccCode.WriteString("{ return " + fnPtrName + "(")
+	ccCode.WriteString("{ return " + f.fnPtrName + "(")
 	i = 0
 	for p := range f.ccParams {
 		ccCode.WriteString(p)
@@ -233,9 +258,9 @@ func (f *FnWrapper) Generate() error {
 	goCode.WriteRune('\t')
 
 	if spec.Return == nil {
-		goCode.WriteString("C." + fnName + "(")
+		goCode.WriteString("C." + f.fnName + "(")
 	} else {
-		goCode.WriteString("return C." + fnName + "(")
+		goCode.WriteString("return C." + f.fnName + "(")
 	}
 
 	// Add args:
