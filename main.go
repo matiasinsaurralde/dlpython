@@ -52,7 +52,7 @@ func FindPythonConfig(prefix string) error {
 			matches := pythonConfigExpr.FindAllStringSubmatch(name, -1)
 			if len(matches) > 0 {
 				version := matches[0][1]
-				fmt.Println("Found Python installation", version, name)
+				fmt.Printf("*** Found Python installation '%s' (using '%s')\n", version, name)
 				if strings.HasPrefix(version, prefix) {
 					fullPath := filepath.Join(p, name)
 					pythonConfigBinaries = append(pythonConfigBinaries, fullPath)
@@ -97,6 +97,7 @@ func getLibraryPath() error {
 			}
 		}
 	}
+
 	switch runtime.GOOS {
 	case "darwin":
 		libName = "lib" + libName + ".dylib"
@@ -121,6 +122,10 @@ func Init() error {
 	defer C.free(unsafe.Pointer(libPath))
 
 	// Map API calls and initialize runtime:
-	mapCalls()
+	err := mapCalls()
+	if err != nil {
+		return err
+	}
+	Py_Initialize()
 	return nil
 }
